@@ -1,1944 +1,1122 @@
---========================================================
---                    AZAMET HUB
---                  By Zeth😮‍💨
---========================================================
+--// AZAMET HUB
+--// By Zeth
+--// Roblox Studio Admin / Test System
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
+local UIS = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local SoundService = game:GetService("SoundService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualUser = game:GetService("VirtualUser")
 
 local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local Root = Character:WaitForChild("HumanoidRootPart")
 local Camera = workspace.CurrentCamera
 
 local KEY = "raiderzethvoid"
 
---========================================================
--- SERVICES / CHARACTER
---========================================================
-
-local Character
-local Humanoid
-local Root
-
-local function UpdateCharacter()
-    Character = Player.Character or Player.CharacterAdded:Wait()
-    Humanoid = Character:WaitForChild("Humanoid")
-    Root = Character:WaitForChild("HumanoidRootPart")
-end
-
-UpdateCharacter()
-
---========================================================
--- STATE
---========================================================
-
 local State = {
-    Fly = false,
-    Freeze = false,
-    ESP = false,
-    Invisible = false,
-    Noclip = false,
-    Fullbright = false,
-    InfiniteJump = false,
-    Teleport = false,
-
-    AntiAFK = false,
-    NoFog = false,
-    NoShadows = false,
-    NightVision = false,
-    ThirdPerson = false,
-    AutoSprint = false
+	Fly = false,
+	ESP = false,
+	Invisible = false,
+	Noclip = false,
+	Fullbright = false,
+	InfiniteJump = false,
+	AutoRotate = true,
+	Platform = false,
+	AntiAFK = false,
+	Coordinates = false,
+	FPS = false,
+	Ping = false,
+	Crosshair = false,
+	Compass = false,
+	CameraShake = false,
+	WalkFling = false,
+	Atmosphere = false,
 }
 
+local Destroyed = false
 local FlySpeed = 60
-
+local CameraShakePower = 2
 local OldGravity = workspace.Gravity
 local OldFOV = Camera.FieldOfView
 
-local OldLighting = {
-    Brightness = Lighting.Brightness,
-    ClockTime = Lighting.ClockTime,
-    FogEnd = Lighting.FogEnd,
-    GlobalShadows = Lighting.GlobalShadows
+local OriginalLighting = {
+	Brightness = Lighting.Brightness,
+	ClockTime = Lighting.ClockTime,
+	FogEnd = Lighting.FogEnd,
+	Ambient = Lighting.Ambient,
+	OutdoorAmbient = Lighting.OutdoorAmbient
 }
 
-local FlyConnection
-local NoclipConnection
-local InfiniteJumpConnection
-local AntiAFKConnection
-local AutoSprintConnection
+--==================================================
+-- CHARACTER
+--==================================================
 
-local ESPObjects = {}
+local function RefreshCharacter()
+	Character = Player.Character or Player.CharacterAdded:Wait()
+	Humanoid = Character:WaitForChild("Humanoid")
+	Root = Character:WaitForChild("HumanoidRootPart")
+end
 
-local UIClosed = false
-local Destroyed = false
-local ConfirmOpen = false
+Player.CharacterAdded:Connect(function()
+	task.wait(1)
+	RefreshCharacter()
+end)
 
---========================================================
--- COLORS
---========================================================
-
-local C = {
-    Background = Color3.fromRGB(5,8,13),
-    Panel = Color3.fromRGB(8,12,18),
-    Button = Color3.fromRGB(15,20,28),
-    ButtonHover = Color3.fromRGB(24,32,42),
-    Text = Color3.fromRGB(225,230,235),
-    Muted = Color3.fromRGB(100,115,125),
-    Accent = Color3.fromRGB(0,255,200),
-    AccentDark = Color3.fromRGB(0,170,135),
-    Danger = Color3.fromRGB(230,65,75),
-    DangerHover = Color3.fromRGB(255,80,90)
-}
-
---========================================================
+--==================================================
 -- SOUND SYSTEM
---========================================================
+--==================================================
 
-local CLICK_SOUND_ID = "rbxassetid://113397864512278"
+local function PlaySound(soundType)
+	local Sound = Instance.new("Sound")
+	Sound.Volume = 0.35
+	Sound.Parent = SoundService
 
-local function MakeSound(name, volume)
-    local Sound = Instance.new("Sound")
-    Sound.Name = name
-    Sound.SoundId = CLICK_SOUND_ID
-    Sound.Volume = volume or 0.35
-    Sound.Parent = SoundService
-    return Sound
+	-- Roblox default UI sound
+	Sound.SoundId = "rbxasset://sounds/electronicpingshort.wav"
+
+	if soundType == "Error" then
+		Sound.PlaybackSpeed = 0.65
+	elseif soundType == "Success" then
+		Sound.PlaybackSpeed = 1.35
+	else
+		Sound.PlaybackSpeed = 1
+	end
+
+	Sound:Play()
+	task.delay(2, function()
+		if Sound then
+			Sound:Destroy()
+		end
+	end)
 end
 
-local ClickSound = MakeSound("AZAMET_Click", .28)
-local HoverSound = MakeSound("AZAMET_Hover", .10)
-local OpenSound = MakeSound("AZAMET_Open", .35)
-local CloseSound = MakeSound("AZAMET_Close", .35)
-
-local function PlaySound(Sound)
-    if not Sound then return end
-
-    Sound:Stop()
-    Sound.TimePosition = 0
-    Sound:Play()
-end
-
---========================================================
+--==================================================
 -- GUI
---========================================================
+--==================================================
 
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "AZAMET_HUB"
+Gui.Name = "AZAMET_BY_ZETH"
 Gui.ResetOnSpawn = false
 Gui.IgnoreGuiInset = true
-Gui.DisplayOrder = 999
-Gui.Parent = PlayerGui
+Gui.Parent = Player:WaitForChild("PlayerGui")
 
---========================================================
--- LOADING SCREEN
---========================================================
+local Scale = Instance.new("UIScale")
+Scale.Scale = UIS.TouchEnabled and 0.88 or 1
+Scale.Parent = Gui
 
-local Loading = Instance.new("Frame")
-Loading.Size = UDim2.fromScale(1,1)
-Loading.BackgroundColor3 = C.Background
-Loading.BorderSizePixel = 0
-Loading.Parent = Gui
-
-local LoadScale = Instance.new("UIScale")
-LoadScale.Scale = .92
-LoadScale.Parent = Loading
-
-local LoadTitle = Instance.new("TextLabel")
-LoadTitle.AnchorPoint = Vector2.new(.5,.5)
-LoadTitle.Position = UDim2.fromScale(.5,.42)
-LoadTitle.Size = UDim2.fromOffset(600,80)
-LoadTitle.BackgroundTransparency = 1
-LoadTitle.Text = "AZAMET"
-LoadTitle.TextColor3 = C.Accent
-LoadTitle.TextTransparency = 1
-LoadTitle.TextSize = 58
-LoadTitle.Font = Enum.Font.GothamBlack
-LoadTitle.Parent = Loading
-
-local LoadSub = Instance.new("TextLabel")
-LoadSub.AnchorPoint = Vector2.new(.5,.5)
-LoadSub.Position = UDim2.fromScale(.5,.51)
-LoadSub.Size = UDim2.fromOffset(500,30)
-LoadSub.BackgroundTransparency = 1
-LoadSub.Text = "STUDIO CONTROL SYSTEM"
-LoadSub.TextColor3 = C.Muted
-LoadSub.TextTransparency = 1
-LoadSub.TextSize = 14
-LoadSub.Font = Enum.Font.GothamBold
-LoadSub.Parent = Loading
-
-local LoadBack = Instance.new("Frame")
-LoadBack.AnchorPoint = Vector2.new(.5,.5)
-LoadBack.Position = UDim2.fromScale(.5,.63)
-LoadBack.Size = UDim2.fromOffset(320,5)
-LoadBack.BackgroundColor3 = Color3.fromRGB(25,30,35)
-LoadBack.BorderSizePixel = 0
-LoadBack.Parent = Loading
-
-Instance.new("UICorner",LoadBack).CornerRadius = UDim.new(1,0)
-
-local LoadBar = Instance.new("Frame")
-LoadBar.Size = UDim2.new(0,0,1,0)
-LoadBar.BackgroundColor3 = C.Accent
-LoadBar.BorderSizePixel = 0
-LoadBar.Parent = LoadBack
-
-Instance.new("UICorner",LoadBar).CornerRadius = UDim.new(1,0)
-
-local LoadText = Instance.new("TextLabel")
-LoadText.AnchorPoint = Vector2.new(.5,.5)
-LoadText.Position = UDim2.fromScale(.5,.69)
-LoadText.Size = UDim2.fromOffset(400,25)
-LoadText.BackgroundTransparency = 1
-LoadText.Text = "Başlatılıyor..."
-LoadText.TextColor3 = C.Muted
-LoadText.TextSize = 12
-LoadText.Font = Enum.Font.Gotham
-LoadText.Parent = Loading
-
-TweenService:Create(
-    LoadScale,
-    TweenInfo.new(.7,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),
-    {Scale = 1}
-):Play()
-
-TweenService:Create(
-    LoadTitle,
-    TweenInfo.new(.7,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),
-    {TextTransparency = 0}
-):Play()
-
-TweenService:Create(
-    LoadSub,
-    TweenInfo.new(.8,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),
-    {TextTransparency = 0}
-):Play()
-
-TweenService:Create(
-    LoadBar,
-    TweenInfo.new(2,Enum.EasingStyle.Quart,Enum.EasingDirection.Out),
-    {Size = UDim2.fromScale(1,1)}
-):Play()
-
-task.wait(.65)
-LoadText.Text = "Modüller hazırlanıyor..."
-
-task.wait(.65)
-LoadText.Text = "AZAMET yükleniyor..."
-
-task.wait(.65)
-
-TweenService:Create(
-    Loading,
-    TweenInfo.new(.55,Enum.EasingStyle.Quart,Enum.EasingDirection.In),
-    {BackgroundTransparency = 1}
-):Play()
-
-TweenService:Create(
-    LoadTitle,
-    TweenInfo.new(.45),
-    {TextTransparency = 1}
-):Play()
-
-TweenService:Create(
-    LoadSub,
-    TweenInfo.new(.45),
-    {TextTransparency = 1}
-):Play()
-
-task.wait(.6)
-
-Loading:Destroy()
-
---========================================================
+--==================================================
 -- KEY SCREEN
---========================================================
+--==================================================
 
 local KeyFrame = Instance.new("Frame")
-KeyFrame.AnchorPoint = Vector2.new(.5,.5)
-KeyFrame.Position = UDim2.fromScale(.5,.5)
-KeyFrame.Size = UDim2.fromOffset(370,245)
-KeyFrame.BackgroundColor3 = C.Panel
+KeyFrame.Size = UDim2.fromOffset(330, 245)
+KeyFrame.Position = UDim2.fromScale(0.5, 0.5)
+KeyFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+KeyFrame.BackgroundColor3 = Color3.fromRGB(7, 10, 15)
 KeyFrame.BorderSizePixel = 0
 KeyFrame.Parent = Gui
 
-Instance.new("UICorner",KeyFrame).CornerRadius = UDim.new(0,18)
+local KeyCorner = Instance.new("UICorner", KeyFrame)
+KeyCorner.CornerRadius = UDim.new(0, 14)
 
-local KeyScale = Instance.new("UIScale")
-KeyScale.Scale = .85
-KeyScale.Parent = KeyFrame
-
-local KeyStroke = Instance.new("UIStroke")
-KeyStroke.Color = C.Accent
-KeyStroke.Transparency = .3
+local KeyStroke = Instance.new("UIStroke", KeyFrame)
+KeyStroke.Color = Color3.fromRGB(0, 255, 210)
 KeyStroke.Thickness = 1.5
-KeyStroke.Parent = KeyFrame
 
-TweenService:Create(
-    KeyScale,
-    TweenInfo.new(.5,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
-    {Scale = 1}
-):Play()
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 48)
+Title.BackgroundTransparency = 1
+Title.Text = "AZAMET"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 27
+Title.TextColor3 = Color3.fromRGB(0, 255, 210)
+Title.Parent = KeyFrame
 
-local KeyTitle = Instance.new("TextLabel")
-KeyTitle.Position = UDim2.fromOffset(22,18)
-KeyTitle.Size = UDim2.new(1,-44,0,35)
-KeyTitle.BackgroundTransparency = 1
-KeyTitle.Text = "AZAMET"
-KeyTitle.TextColor3 = C.Accent
-KeyTitle.TextSize = 28
-KeyTitle.Font = Enum.Font.GothamBlack
-KeyTitle.TextXAlignment = Enum.TextXAlignment.Left
-KeyTitle.Parent = KeyFrame
-
-local KeySub = Instance.new("TextLabel")
-KeySub.Position = UDim2.fromOffset(22,52)
-KeySub.Size = UDim2.new(1,-44,0,25)
-KeySub.BackgroundTransparency = 1
-KeySub.Text = "Güvenli erişim anahtarını gir"
-KeySub.TextColor3 = C.Muted
-KeySub.TextSize = 13
-KeySub.Font = Enum.Font.Gotham
-KeySub.TextXAlignment = Enum.TextXAlignment.Left
-KeySub.Parent = KeyFrame
+local By = Instance.new("TextLabel")
+By.Size = UDim2.new(1, 0, 0, 22)
+By.Position = UDim2.fromOffset(0, 42)
+By.BackgroundTransparency = 1
+By.Text = "By Zeth"
+By.Font = Enum.Font.GothamBold
+By.TextSize = 13
+By.TextColor3 = Color3.fromRGB(145, 155, 170)
+By.Parent = KeyFrame
 
 local KeyBox = Instance.new("TextBox")
-KeyBox.Position = UDim2.fromOffset(22,92)
-KeyBox.Size = UDim2.new(1,-44,0,44)
-KeyBox.BackgroundColor3 = Color3.fromRGB(17,21,28)
-KeyBox.BorderSizePixel = 0
-KeyBox.PlaceholderText = "KEY"
-KeyBox.PlaceholderColor3 = Color3.fromRGB(85,95,105)
+KeyBox.Size = UDim2.new(1, -40, 0, 42)
+KeyBox.Position = UDim2.fromOffset(20, 78)
+KeyBox.BackgroundColor3 = Color3.fromRGB(15, 20, 28)
+KeyBox.PlaceholderText = "KEY GİR..."
 KeyBox.Text = ""
-KeyBox.TextColor3 = Color3.fromRGB(240,245,250)
-KeyBox.TextSize = 14
+KeyBox.TextColor3 = Color3.new(1,1,1)
+KeyBox.PlaceholderColor3 = Color3.fromRGB(100,110,120)
 KeyBox.Font = Enum.Font.Gotham
+KeyBox.TextSize = 14
 KeyBox.ClearTextOnFocus = false
 KeyBox.Parent = KeyFrame
 
-Instance.new("UICorner",KeyBox).CornerRadius = UDim.new(0,9)
+Instance.new("UICorner", KeyBox).CornerRadius = UDim.new(0, 8)
 
-local Enter = Instance.new("TextButton")
-Enter.Position = UDim2.fromOffset(22,148)
-Enter.Size = UDim2.new(1,-44,0,42)
-Enter.BackgroundColor3 = C.AccentDark
-Enter.BorderSizePixel = 0
-Enter.Text = "GİRİŞ YAP"
-Enter.TextColor3 = Color3.new(1,1,1)
-Enter.TextSize = 14
-Enter.Font = Enum.Font.GothamBold
-Enter.AutoButtonColor = false
-Enter.Parent = KeyFrame
+local Login = Instance.new("TextButton")
+Login.Size = UDim2.fromOffset(135, 40)
+Login.Position = UDim2.fromOffset(20, 132)
+Login.BackgroundColor3 = Color3.fromRGB(0, 190, 160)
+Login.Text = "GİRİŞ"
+Login.Font = Enum.Font.GothamBold
+Login.TextSize = 14
+Login.TextColor3 = Color3.fromRGB(0, 0, 0)
+Login.Parent = KeyFrame
 
-Instance.new("UICorner",Enter).CornerRadius = UDim.new(0,9)
+Instance.new("UICorner", Login).CornerRadius = UDim.new(0, 8)
+
+local GetKey = Instance.new("TextButton")
+GetKey.Size = UDim2.fromOffset(135, 40)
+GetKey.Position = UDim2.fromOffset(175, 132)
+GetKey.BackgroundColor3 = Color3.fromRGB(25, 32, 42)
+GetKey.Text = "🔑 KEY AL"
+GetKey.Font = Enum.Font.GothamBold
+GetKey.TextSize = 13
+GetKey.TextColor3 = Color3.fromRGB(0, 255, 210)
+GetKey.Parent = KeyFrame
+
+Instance.new("UICorner", GetKey).CornerRadius = UDim.new(0, 8)
 
 local KeyStatus = Instance.new("TextLabel")
-KeyStatus.Position = UDim2.fromOffset(22,198)
-KeyStatus.Size = UDim2.new(1,-44,0,25)
+KeyStatus.Size = UDim2.new(1, -30, 0, 45)
+KeyStatus.Position = UDim2.fromOffset(15, 185)
 KeyStatus.BackgroundTransparency = 1
-KeyStatus.Text = ""
-KeyStatus.TextSize = 12
+KeyStatus.Text = "Key gerekli • By Zeth"
 KeyStatus.Font = Enum.Font.Gotham
+KeyStatus.TextSize = 12
+KeyStatus.TextColor3 = Color3.fromRGB(130,140,150)
 KeyStatus.Parent = KeyFrame
 
---========================================================
+GetKey.MouseButton1Click:Connect(function()
+	PlaySound("Click")
+
+	if setclipboard then
+		setclipboard("https://discord.gg/FNrA9rfCZz")
+		KeyStatus.Text = "Discord linki kopyalandı!"
+	else
+		KeyStatus.Text = "Discord: discord.gg/FNrA9rfCZz"
+	end
+
+	KeyStatus.TextColor3 = Color3.fromRGB(0,255,210)
+end)
+
+--==================================================
 -- MAIN
---========================================================
+--==================================================
 
 local Main = Instance.new("Frame")
-Main.AnchorPoint = Vector2.new(.5,.5)
-Main.Position = UDim2.fromScale(.5,.5)
-Main.Size = UDim2.fromOffset(650,470)
-Main.BackgroundColor3 = C.Panel
+Main.Name = "Main"
+Main.Size = UDim2.fromOffset(520, 360)
+Main.Position = UDim2.fromScale(0.5, 0.5)
+Main.AnchorPoint = Vector2.new(0.5, 0.5)
+Main.BackgroundColor3 = Color3.fromRGB(6, 9, 14)
 Main.BorderSizePixel = 0
 Main.Visible = false
 Main.Parent = Gui
 
-Instance.new("UICorner",Main).CornerRadius = UDim.new(0,18)
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 13)
 
-local MainScale = Instance.new("UIScale")
-MainScale.Scale = .9
-MainScale.Parent = Main
+local MainStroke = Instance.new("UIStroke", Main)
+MainStroke.Color = Color3.fromRGB(0, 220, 185)
+MainStroke.Thickness = 1.2
 
-local MainStroke = Instance.new("UIStroke")
-MainStroke.Color = C.Accent
-MainStroke.Transparency = .42
-MainStroke.Thickness = 1.5
-MainStroke.Parent = Main
-
---========================================================
--- DRAG
---========================================================
-
-local Dragging = false
-local DragStart
-local StartPosition
+-- HEADER
 
 local Header = Instance.new("Frame")
-Header.Size = UDim2.new(1,0,0,68)
-Header.BackgroundTransparency = 1
+Header.Size = UDim2.new(1,0,0,48)
+Header.BackgroundColor3 = Color3.fromRGB(10,15,22)
+Header.BorderSizePixel = 0
 Header.Parent = Main
 
-Header.InputBegan:Connect(function(input)
-
-    if input.UserInputType == Enum.UserInputType.MouseButton1
-    or input.UserInputType == Enum.UserInputType.Touch then
-
-        Dragging = true
-        DragStart = input.Position
-        StartPosition = Main.Position
-
-        input.Changed:Connect(function()
-
-            if input.UserInputState == Enum.UserInputState.End then
-                Dragging = false
-            end
-
-        end)
-
-    end
-
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-
-    if Dragging and
-        (input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch) then
-
-        local Delta = input.Position - DragStart
-
-        Main.Position = UDim2.new(
-            StartPosition.X.Scale,
-            StartPosition.X.Offset + Delta.X,
-            StartPosition.Y.Scale,
-            StartPosition.Y.Offset + Delta.Y
-        )
-
-    end
-
-end)
-
---========================================================
--- HEADER
---========================================================
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0,13)
 
 local HeaderTitle = Instance.new("TextLabel")
-HeaderTitle.Position = UDim2.fromOffset(22,10)
-HeaderTitle.Size = UDim2.fromOffset(300,32)
+HeaderTitle.Size = UDim2.new(1,-100,1,0)
+HeaderTitle.Position = UDim2.fromOffset(15,0)
 HeaderTitle.BackgroundTransparency = 1
-HeaderTitle.Text = "AZAMET"
-HeaderTitle.TextColor3 = C.Accent
-HeaderTitle.TextSize = 25
-HeaderTitle.Font = Enum.Font.GothamBlack
+HeaderTitle.Text = "AZAMET  •  By Zeth"
 HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left
+HeaderTitle.Font = Enum.Font.GothamBlack
+HeaderTitle.TextSize = 17
+HeaderTitle.TextColor3 = Color3.fromRGB(0,255,210)
 HeaderTitle.Parent = Header
 
-local HeaderSub = Instance.new("TextLabel")
-HeaderSub.Position = UDim2.fromOffset(23,39)
-HeaderSub.Size = UDim2.fromOffset(350,18)
-HeaderSub.BackgroundTransparency = 1
-HeaderSub.Text = "STUDIO CONTROL PANEL  •  ZETH"
-HeaderSub.TextColor3 = C.Muted
-HeaderSub.TextSize = 10
-HeaderSub.Font = Enum.Font.GothamBold
-HeaderSub.TextXAlignment = Enum.TextXAlignment.Left
-HeaderSub.Parent = Header
+local Minimize = Instance.new("TextButton")
+Minimize.Size = UDim2.fromOffset(38,32)
+Minimize.Position = UDim2.new(1,-78,0,8)
+Minimize.BackgroundColor3 = Color3.fromRGB(25,32,42)
+Minimize.Text = "—"
+Minimize.Font = Enum.Font.GothamBold
+Minimize.TextSize = 18
+Minimize.TextColor3 = Color3.new(1,1,1)
+Minimize.Parent = Header
+Instance.new("UICorner",Minimize).CornerRadius = UDim.new(0,7)
 
---========================================================
--- HEADER BUTTONS
---========================================================
+local Close = Instance.new("TextButton")
+Close.Size = UDim2.fromOffset(32,32)
+Close.Position = UDim2.new(1,-38,0,8)
+Close.BackgroundColor3 = Color3.fromRGB(120,35,45)
+Close.Text = "×"
+Close.Font = Enum.Font.GothamBold
+Close.TextSize = 20
+Close.TextColor3 = Color3.new(1,1,1)
+Close.Parent = Header
+Instance.new("UICorner",Close).CornerRadius = UDim.new(0,7)
 
-local MinButton = Instance.new("TextButton")
-MinButton.Position = UDim2.new(1,-78,0,16)
-MinButton.Size = UDim2.fromOffset(28,28)
-MinButton.BackgroundColor3 = C.Button
-MinButton.BorderSizePixel = 0
-MinButton.Text = "−"
-MinButton.TextColor3 = C.Text
-MinButton.TextSize = 20
-MinButton.Font = Enum.Font.GothamBold
-MinButton.AutoButtonColor = false
-MinButton.Parent = Header
+-- SCROLL
 
-Instance.new("UICorner",MinButton).CornerRadius = UDim.new(0,8)
+local Scroll = Instance.new("ScrollingFrame")
+Scroll.Size = UDim2.new(1,-20,1,-62)
+Scroll.Position = UDim2.fromOffset(10,55)
+Scroll.BackgroundTransparency = 1
+Scroll.BorderSizePixel = 0
+Scroll.ScrollBarThickness = 4
+Scroll.ScrollBarImageColor3 = Color3.fromRGB(0,220,185)
+Scroll.CanvasSize = UDim2.new(0,0,0,0)
+Scroll.Parent = Main
 
-local CloseButton = Instance.new("TextButton")
-CloseButton.Position = UDim2.new(1,-42,0,16)
-CloseButton.Size = UDim2.fromOffset(28,28)
-CloseButton.BackgroundColor3 = Color3.fromRGB(35,20,24)
-CloseButton.BorderSizePixel = 0
-CloseButton.Text = "×"
-CloseButton.TextColor3 = Color3.fromRGB(255,100,110)
-CloseButton.TextSize = 20
-CloseButton.Font = Enum.Font.GothamBold
-CloseButton.AutoButtonColor = false
-CloseButton.Parent = Header
+local Layout = Instance.new("UIListLayout")
+Layout.Padding = UDim.new(0,7)
+Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+Layout.Parent = Scroll
 
-Instance.new("UICorner",CloseButton).CornerRadius = UDim.new(0,8)
+local Padding = Instance.new("UIPadding")
+Padding.PaddingTop = UDim.new(0,3)
+Padding.PaddingBottom = UDim.new(0,12)
+Padding.Parent = Scroll
 
---========================================================
--- MINI BAR
---========================================================
-
-local Mini = Instance.new("TextButton")
-Mini.AnchorPoint = Vector2.new(.5,0)
-Mini.Position = UDim2.fromScale(.5,0)
-Mini.Size = UDim2.fromOffset(230,36)
-Mini.BackgroundColor3 = C.Panel
-Mini.BorderSizePixel = 0
-Mini.Text = "────  AZAMET  ────"
-Mini.TextColor3 = C.Accent
-Mini.TextSize = 13
-Mini.Font = Enum.Font.GothamBlack
-Mini.AutoButtonColor = false
-Mini.Visible = false
-Mini.Parent = Gui
-
-Instance.new("UICorner",Mini).CornerRadius = UDim.new(0,10)
-
-local MiniStroke = Instance.new("UIStroke")
-MiniStroke.Color = C.Accent
-MiniStroke.Transparency = .35
-MiniStroke.Parent = Mini
-
---========================================================
--- BUTTON FACTORY
---========================================================
-
-local function Button(text,x,y,w,h,parent)
-
-    local B = Instance.new("TextButton")
-
-    B.Position = UDim2.fromOffset(x,y)
-    B.Size = UDim2.fromOffset(w,h)
-    B.BackgroundColor3 = C.Button
-    B.BorderSizePixel = 0
-    B.Text = text
-    B.TextColor3 = C.Text
-    B.TextSize = 12
-    B.Font = Enum.Font.GothamBold
-    B.AutoButtonColor = false
-    B.Parent = parent or Main
-
-    Instance.new("UICorner",B).CornerRadius = UDim.new(0,10)
-
-    local S = Instance.new("UIStroke")
-    S.Color = Color3.fromRGB(30,38,48)
-    S.Transparency = .2
-    S.Parent = B
-
-    B.MouseEnter:Connect(function()
-
-        TweenService:Create(
-            B,
-            TweenInfo.new(.12,Enum.EasingStyle.Quart),
-            {BackgroundColor3 = C.ButtonHover}
-        ):Play()
-
-        PlaySound(HoverSound)
-
-    end)
-
-    B.MouseLeave:Connect(function()
-
-        TweenService:Create(
-            B,
-            TweenInfo.new(.12),
-            {BackgroundColor3 = C.Button}
-        ):Play()
-
-    end)
-
-    B.MouseButton1Click:Connect(function()
-        PlaySound(ClickSound)
-    end)
-
-    return B
+local function UpdateCanvas()
+	Scroll.CanvasSize = UDim2.fromOffset(0, Layout.AbsoluteContentSize.Y + 15)
 end
 
---========================================================
--- TAB SYSTEM
---========================================================
+Layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(UpdateCanvas)
 
-local Tabs = Instance.new("Frame")
-Tabs.Position = UDim2.fromOffset(18,72)
-Tabs.Size = UDim2.new(1,-36,0,40)
-Tabs.BackgroundTransparency = 1
-Tabs.Parent = Main
+--==================================================
+-- BUTTON HELPERS
+--==================================================
 
-local Content = Instance.new("Frame")
-Content.Position = UDim2.fromOffset(18,120)
-Content.Size = UDim2.new(1,-36,1,-138)
-Content.BackgroundTransparency = 1
-Content.Parent = Main
+local function Button(text)
+	local B = Instance.new("TextButton")
+	B.Size = UDim2.new(1,-5,0,38)
+	B.BackgroundColor3 = Color3.fromRGB(15,21,29)
+	B.Text = text
+	B.Font = Enum.Font.GothamBold
+	B.TextSize = 13
+	B.TextColor3 = Color3.fromRGB(220,230,235)
+	B.AutoButtonColor = false
+	B.Parent = Scroll
 
-local Pages = {}
+	Instance.new("UICorner",B).CornerRadius = UDim.new(0,8)
 
-local function NewPage(Name)
-    local Page = Instance.new("Frame")
-    Page.Name = Name
-    Page.Size = UDim2.fromScale(1,1)
-    Page.BackgroundTransparency = 1
-    Page.Visible = false
-    Page.Parent = Content
-    Pages[Name] = Page
-    return Page
+	local Stroke = Instance.new("UIStroke",B)
+	Stroke.Color = Color3.fromRGB(30,42,52)
+	Stroke.Thickness = 1
+
+	B.MouseEnter:Connect(function()
+		TweenService:Create(B,TweenInfo.new(.15),{
+			BackgroundColor3=Color3.fromRGB(20,32,40)
+		}):Play()
+	end)
+
+	B.MouseLeave:Connect(function()
+		TweenService:Create(B,TweenInfo.new(.15),{
+			BackgroundColor3=Color3.fromRGB(15,21,29)
+		}):Play()
+	end)
+
+	B.MouseButton1Click:Connect(function()
+		PlaySound("Click")
+	end)
+
+	return B
 end
 
-local MovementPage = NewPage("Movement")
-local VisualPage = NewPage("Visual")
-local ToolsPage = NewPage("Tools")
-local WorldPage = NewPage("World")
-
-local CurrentPage
-
-local function OpenPage(Name)
-
-    for PageName,Page in pairs(Pages) do
-        Page.Visible = PageName == Name
-    end
-
-    CurrentPage = Name
-
+local function Section(text)
+	local L = Instance.new("TextLabel")
+	L.Size = UDim2.new(1,-5,0,25)
+	L.BackgroundTransparency = 1
+	L.Text = "  "..text
+	L.TextXAlignment = Enum.TextXAlignment.Left
+	L.Font = Enum.Font.GothamBlack
+	L.TextSize = 12
+	L.TextColor3 = Color3.fromRGB(0,255,210)
+	L.Parent = Scroll
 end
 
-local TabNames = {
-    {"MOVEMENT",MovementPage},
-    {"VISUAL",VisualPage},
-    {"TOOLS",ToolsPage},
-    {"WORLD",WorldPage}
-}
+local function InputRow(placeholder, default)
+	local Box = Instance.new("TextBox")
+	Box.Size = UDim2.new(1,-5,0,38)
+	Box.BackgroundColor3 = Color3.fromRGB(15,21,29)
+	Box.PlaceholderText = placeholder
+	Box.Text = default or ""
+	Box.TextColor3 = Color3.new(1,1,1)
+	Box.PlaceholderColor3 = Color3.fromRGB(100,110,120)
+	Box.Font = Enum.Font.Gotham
+	Box.TextSize = 13
+	Box.Parent = Scroll
 
-for i,Data in ipairs(TabNames) do
+	Instance.new("UICorner",Box).CornerRadius = UDim.new(0,8)
 
-    local Name = Data[1]
-
-    local Tab = Button(
-        Name,
-        (i-1)*153,
-        0,
-        145,
-        38,
-        Tabs
-    )
-
-    Tab.MouseButton1Click:Connect(function()
-        OpenPage(Name:sub(1,1)..Name:sub(2):lower())
-    end)
-
+	return Box
 end
 
--- Fix page names manually
-local TabButtons = {}
+local function Toggle(button, state, label)
+	state = not state
 
-for _,Child in ipairs(Tabs:GetChildren()) do
-    if Child:IsA("TextButton") then
-        TabButtons[Child.Text] = Child
-    end
+	button.Text = label .. (state and "  [ON]" or "  [OFF]")
+	button.TextColor3 = state
+		and Color3.fromRGB(0,255,210)
+		or Color3.fromRGB(220,230,235)
+
+	return state
 end
 
-local function ShowPage(Name)
-
-    for N,Page in pairs(Pages) do
-        Page.Visible = N == Name
-    end
-
-    for _,Tab in pairs(TabButtons) do
-        Tab.TextColor3 = C.Text
-        Tab.BackgroundColor3 = C.Button
-    end
-
-    if TabButtons[string.upper(Name)] then
-        TabButtons[string.upper(Name)].TextColor3 = C.Accent
-        TabButtons[string.upper(Name)].BackgroundColor3 = Color3.fromRGB(18,38,38)
-    end
-
-end
-
---========================================================
--- MOVEMENT PAGE
---========================================================
-
-local FlyButton = Button("✈  FLY   OFF",0,0,285,42,MovementPage)
-
-local FlySpeedBox = Instance.new("TextBox")
-FlySpeedBox.Position = UDim2.fromOffset(295,0)
-FlySpeedBox.Size = UDim2.fromOffset(125,42)
-FlySpeedBox.BackgroundColor3 = C.Button
-FlySpeedBox.BorderSizePixel = 0
-FlySpeedBox.PlaceholderText = "Fly Speed"
-FlySpeedBox.PlaceholderColor3 = C.Muted
-FlySpeedBox.TextColor3 = C.Text
-FlySpeedBox.TextSize = 12
-FlySpeedBox.Font = Enum.Font.Gotham
-FlySpeedBox.Parent = MovementPage
-
-Instance.new("UICorner",FlySpeedBox).CornerRadius = UDim.new(0,10)
-
-local FreezeButton = Button("❄  FREEZE   OFF",0,52,205,42,MovementPage)
-local InfiniteButton = Button("♾  INFINITE JUMP   OFF",215,52,205,42,MovementPage)
-
-local SpeedBox = Instance.new("TextBox")
-SpeedBox.Position = UDim2.fromOffset(0,104)
-SpeedBox.Size = UDim2.fromOffset(140,42)
-SpeedBox.BackgroundColor3 = C.Button
-SpeedBox.BorderSizePixel = 0
-SpeedBox.PlaceholderText = "Walk Speed"
-SpeedBox.PlaceholderColor3 = C.Muted
-SpeedBox.TextColor3 = C.Text
-SpeedBox.TextSize = 12
-SpeedBox.Font = Enum.Font.Gotham
-SpeedBox.Parent = MovementPage
-
-Instance.new("UICorner",SpeedBox).CornerRadius = UDim.new(0,10)
-
-local SpeedApply = Button("UYGULA",150,104,100,42,MovementPage)
-
-local JumpBox = Instance.new("TextBox")
-JumpBox.Position = UDim2.fromOffset(260,104)
-JumpBox.Size = UDim2.fromOffset(160,42)
-JumpBox.BackgroundColor3 = C.Button
-JumpBox.BorderSizePixel = 0
-JumpBox.PlaceholderText = "Jump Power"
-JumpBox.PlaceholderColor3 = C.Muted
-JumpBox.TextColor3 = C.Text
-JumpBox.TextSize = 12
-JumpBox.Font = Enum.Font.Gotham
-JumpBox.Parent = MovementPage
-
-Instance.new("UICorner",JumpBox).CornerRadius = UDim.new(0,10)
-
-local JumpApply = Button("UYGULA",0,156,120,42,MovementPage)
-
-local AutoSprintButton = Button("🏃  AUTO SPRINT   OFF",130,156,290,42,MovementPage)
-
---========================================================
+--==================================================
 -- FLY
---========================================================
+--==================================================
 
+local FlyButton
+local FlyVelocity
+local FlyConnection
+
+local function SetFly(value)
+	State.Fly = value
+
+	if value then
+		FlyButton.Text = "✈ Fly  [ON]"
+		FlyButton.TextColor3 = Color3.fromRGB(0,255,210)
+
+		FlyVelocity = Instance.new("BodyVelocity")
+		FlyVelocity.MaxForce = Vector3.new(1e6,1e6,1e6)
+		FlyVelocity.Velocity = Vector3.zero
+		FlyVelocity.Parent = Root
+
+		FlyConnection = RunService.RenderStepped:Connect(function()
+			if not State.Fly or not Root then return end
+
+			local Direction = Vector3.zero
+			local CamCF = Camera.CFrame
+
+			if UIS:IsKeyDown(Enum.KeyCode.W) then
+				Direction += CamCF.LookVector
+			end
+			if UIS:IsKeyDown(Enum.KeyCode.S) then
+				Direction -= CamCF.LookVector
+			end
+			if UIS:IsKeyDown(Enum.KeyCode.A) then
+				Direction -= CamCF.RightVector
+			end
+			if UIS:IsKeyDown(Enum.KeyCode.D) then
+				Direction += CamCF.RightVector
+			end
+
+			if UIS:IsKeyDown(Enum.KeyCode.Space) then
+				Direction += Vector3.yAxis
+			end
+			if UIS:IsKeyDown(Enum.KeyCode.LeftControl) then
+				Direction -= Vector3.yAxis
+			end
+
+			FlyVelocity.Velocity =
+				Direction.Magnitude > 0
+				and Direction.Unit * FlySpeed
+				or Vector3.zero
+		end)
+	else
+		FlyButton.Text = "✈ Fly  [OFF]"
+		FlyButton.TextColor3 = Color3.fromRGB(220,230,235)
+
+		if FlyConnection then
+			FlyConnection:Disconnect()
+			FlyConnection=nil
+		end
+
+		if FlyVelocity then
+			FlyVelocity:Destroy()
+			FlyVelocity=nil
+		end
+	end
+end
+
+--==================================================
+-- FEATURES
+--==================================================
+
+Section("MOVEMENT")
+
+FlyButton = Button("✈ Fly  [OFF]")
 FlyButton.MouseButton1Click:Connect(function()
-
-    UpdateCharacter()
-
-    State.Fly = not State.Fly
-
-    if State.Fly then
-
-        FlyButton.Text = "✈  FLY   ON"
-        FlyButton.TextColor3 = C.Accent
-
-        FlySpeed = tonumber(FlySpeedBox.Text) or 60
-
-        Humanoid.PlatformStand = true
-
-        if FlyConnection then
-            FlyConnection:Disconnect()
-        end
-
-        FlyConnection = RunService.RenderStepped:Connect(function()
-
-            if State.Fly and Root then
-
-                Root.AssemblyLinearVelocity =
-                    Camera.CFrame.LookVector * FlySpeed
-
-                Root.AssemblyAngularVelocity = Vector3.zero
-
-            end
-
-        end)
-
-    else
-
-        FlyButton.Text = "✈  FLY   OFF"
-        FlyButton.TextColor3 = C.Text
-
-        if FlyConnection then
-            FlyConnection:Disconnect()
-            FlyConnection = nil
-        end
-
-        if Humanoid then
-            Humanoid.PlatformStand = false
-        end
-
-        if Root then
-            Root.AssemblyLinearVelocity = Vector3.zero
-        end
-
-    end
-
+	SetFly(not State.Fly)
 end)
 
---========================================================
--- FREEZE
---========================================================
+local SpeedBox = InputRow("Fly Speed", "60")
 
-FreezeButton.MouseButton1Click:Connect(function()
-
-    UpdateCharacter()
-
-    State.Freeze = not State.Freeze
-
-    if Root then
-        Root.Anchored = State.Freeze
-    end
-
-    if State.Freeze then
-        FreezeButton.Text = "❄  FREEZE   ON"
-        FreezeButton.TextColor3 = C.Accent
-    else
-        FreezeButton.Text = "❄  FREEZE   OFF"
-        FreezeButton.TextColor3 = C.Text
-    end
-
-end)
-
---========================================================
--- SPEED
---========================================================
-
+local SpeedApply = Button("⚡ Uygula Fly Speed")
 SpeedApply.MouseButton1Click:Connect(function()
-
-    local Value = tonumber(SpeedBox.Text)
-
-    if Value then
-        UpdateCharacter()
-        Humanoid.WalkSpeed = Value
-    end
-
+	local n = tonumber(SpeedBox.Text)
+	if n then
+		FlySpeed = math.clamp(n,1,500)
+	end
 end)
 
+local WalkBox = InputRow("WalkSpeed", "16")
+local WalkApply = Button("🏃 WalkSpeed Uygula")
+WalkApply.MouseButton1Click:Connect(function()
+	local n=tonumber(WalkBox.Text)
+	if n and Humanoid then
+		Humanoid.WalkSpeed=math.clamp(n,0,500)
+	end
+end)
+
+local JumpBox = InputRow("JumpPower", "50")
+local JumpApply = Button("🦘 JumpPower Uygula")
 JumpApply.MouseButton1Click:Connect(function()
-
-    local Value = tonumber(JumpBox.Text)
-
-    if Value then
-        UpdateCharacter()
-        Humanoid.UseJumpPower = true
-        Humanoid.JumpPower = Value
-    end
-
+	local n=tonumber(JumpBox.Text)
+	if n and Humanoid then
+		Humanoid.UseJumpPower=true
+		Humanoid.JumpPower=math.clamp(n,0,300)
+	end
 end)
 
---========================================================
--- INFINITE JUMP
---========================================================
-
-InfiniteJumpConnection = UserInputService.JumpRequest:Connect(function()
-
-    if State.InfiniteJump then
-
-        UpdateCharacter()
-
-        if Humanoid then
-            Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-
-    end
-
+local NoclipButton = Button("🚫 Noclip  [OFF]")
+NoclipButton.MouseButton1Click:Connect(function()
+	State.Noclip=not State.Noclip
+	NoclipButton.Text="🚫 Noclip  ["..(State.Noclip and "ON" or "OFF").."]"
 end)
 
+local InfiniteButton = Button("🦘 Infinite Jump  [OFF]")
 InfiniteButton.MouseButton1Click:Connect(function()
-
-    State.InfiniteJump = not State.InfiniteJump
-
-    if State.InfiniteJump then
-        InfiniteButton.Text = "♾  INFINITE JUMP   ON"
-        InfiniteButton.TextColor3 = C.Accent
-    else
-        InfiniteButton.Text = "♾  INFINITE JUMP   OFF"
-        InfiniteButton.TextColor3 = C.Text
-    end
-
+	State.InfiniteJump=not State.InfiniteJump
+	InfiniteButton.Text="🦘 Infinite Jump  ["..(State.InfiniteJump and "ON" or "OFF").."]"
 end)
 
---========================================================
--- AUTO SPRINT
---========================================================
-
-AutoSprintButton.MouseButton1Click:Connect(function()
-
-    State.AutoSprint = not State.AutoSprint
-
-    if State.AutoSprint then
-
-        AutoSprintButton.Text = "🏃  AUTO SPRINT   ON"
-        AutoSprintButton.TextColor3 = C.Accent
-
-        if AutoSprintConnection then
-            AutoSprintConnection:Disconnect()
-        end
-
-        AutoSprintConnection = RunService.Heartbeat:Connect(function()
-
-            if State.AutoSprint and Humanoid then
-
-                if Humanoid.MoveDirection.Magnitude > .05 then
-                    Humanoid.WalkSpeed = math.max(Humanoid.WalkSpeed,24)
-                end
-
-            end
-
-        end)
-
-    else
-
-        AutoSprintButton.Text = "🏃  AUTO SPRINT   OFF"
-        AutoSprintButton.TextColor3 = C.Text
-
-        if AutoSprintConnection then
-            AutoSprintConnection:Disconnect()
-            AutoSprintConnection = nil
-        end
-
-    end
-
+local AutoRotateButton = Button("🔄 Auto Rotate  [ON]")
+AutoRotateButton.MouseButton1Click:Connect(function()
+	State.AutoRotate=not State.AutoRotate
+	Humanoid.AutoRotate=State.AutoRotate
+	AutoRotateButton.Text="🔄 Auto Rotate  ["..(State.AutoRotate and "ON" or "OFF").."]"
 end)
 
---========================================================
--- VISUAL PAGE
---========================================================
+local SitButton = Button("🪑 Sit / Stand")
+SitButton.MouseButton1Click:Connect(function()
+	if Humanoid then
+		Humanoid.Sit=not Humanoid.Sit
+	end
+end)
 
-local ESPButton = Button("👁  ESP   OFF",0,0,205,42,VisualPage)
-local InvisibleButton = Button("👻  INVISIBLE   OFF",215,0,205,42,VisualPage)
-local NoclipButton = Button("🚫  NOCLIP   OFF",0,52,205,42,VisualPage)
-local FullbrightButton = Button("☀  FULLBRIGHT   OFF",215,52,205,42,VisualPage)
-local NightVisionButton = Button("🌙  NIGHT VISION   OFF",0,104,205,42,VisualPage)
-local NoFogButton = Button("🌫  NO FOG   OFF",215,104,205,42,VisualPage)
-local NoShadowButton = Button("◐  NO SHADOWS   OFF",0,156,205,42,VisualPage)
-local ThirdPersonButton = Button("🎥  THIRD PERSON   OFF",215,156,205,42,VisualPage)
+local PlatformButton = Button("🟦 Character Platform  [OFF]")
+local Platform
 
-local FOVBox = Instance.new("TextBox")
-FOVBox.Position = UDim2.fromOffset(0,208)
-FOVBox.Size = UDim2.fromOffset(150,42)
-FOVBox.BackgroundColor3 = C.Button
-FOVBox.BorderSizePixel = 0
-FOVBox.PlaceholderText = "FOV"
-FOVBox.PlaceholderColor3 = C.Muted
-FOVBox.TextColor3 = C.Text
-FOVBox.TextSize = 12
-FOVBox.Font = Enum.Font.Gotham
-FOVBox.Parent = VisualPage
+PlatformButton.MouseButton1Click:Connect(function()
+	State.Platform=not State.Platform
 
-Instance.new("UICorner",FOVBox).CornerRadius = UDim.new(0,10)
+	if State.Platform then
+		Platform=Instance.new("Part")
+		Platform.Size=Vector3.new(7,0.5,7)
+		Platform.Anchored=true
+		Platform.CanCollide=true
+		Platform.Transparency=.2
+		Platform.Material=Enum.Material.Neon
+		Platform.Parent=workspace
 
-local FOVApply = Button("FOV UYGULA",160,208,125,42,VisualPage)
+		PlatformButton.Text="🟦 Character Platform  [ON]"
+	else
+		if Platform then Platform:Destroy() Platform=nil end
+		PlatformButton.Text="🟦 Character Platform  [OFF]"
+	end
+end)
 
---========================================================
--- ESP
---========================================================
+Section("PLAYER / VISUAL")
 
-local function RemoveESP(PlayerObject)
+local ESPButton = Button("👁 ESP  [OFF]")
+local ESPObjects={}
 
-    if ESPObjects[PlayerObject] then
-        ESPObjects[PlayerObject]:Destroy()
-        ESPObjects[PlayerObject] = nil
-    end
-
+local function ClearESP()
+	for _,v in pairs(ESPObjects) do
+		if v then v:Destroy() end
+	end
+	table.clear(ESPObjects)
 end
 
-local function AddESP(PlayerObject)
+local function ApplyESP()
+	ClearESP()
 
-    if PlayerObject == Player then return end
-    if not State.ESP then return end
+	if not State.ESP then return end
 
-    local Char = PlayerObject.Character
-    if not Char then return end
-
-    RemoveESP(PlayerObject)
-
-    local Highlight = Instance.new("Highlight")
-
-    Highlight.Name = "AZAMET_ESP"
-    Highlight.Adornee = Char
-    Highlight.FillColor = C.Accent
-    Highlight.OutlineColor = Color3.new(1,1,1)
-    Highlight.FillTransparency = .65
-    Highlight.OutlineTransparency = .05
-    Highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-
-    Highlight.Parent = Char
-
-    ESPObjects[PlayerObject] = Highlight
-
-end
-
-local function RefreshESP()
-
-    for _,P in ipairs(Players:GetPlayers()) do
-
-        if P ~= Player then
-
-            if State.ESP then
-                AddESP(P)
-            else
-                RemoveESP(P)
-            end
-
-        end
-
-    end
-
+	for _,p in ipairs(Players:GetPlayers()) do
+		if p~=Player and p.Character then
+			local H=Instance.new("Highlight")
+			H.FillTransparency=.65
+			H.OutlineColor=Color3.fromRGB(0,255,210)
+			H.FillColor=Color3.fromRGB(0,180,150)
+			H.Adornee=p.Character
+			H.Parent=p.Character
+			table.insert(ESPObjects,H)
+		end
+	end
 end
 
 ESPButton.MouseButton1Click:Connect(function()
-
-    State.ESP = not State.ESP
-
-    if State.ESP then
-        ESPButton.Text = "👁  ESP   ON"
-        ESPButton.TextColor3 = C.Accent
-    else
-        ESPButton.Text = "👁  ESP   OFF"
-        ESPButton.TextColor3 = C.Text
-    end
-
-    RefreshESP()
-
+	State.ESP=not State.ESP
+	ESPButton.Text="👁 ESP  ["..(State.ESP and "ON" or "OFF").."]"
+	ApplyESP()
 end)
 
-Players.PlayerAdded:Connect(function(P)
-
-    P.CharacterAdded:Connect(function()
-
-        task.wait(.4)
-
-        if State.ESP then
-            AddESP(P)
-        end
-
-    end)
-
-end)
-
-Players.PlayerRemoving:Connect(RemoveESP)
-
---========================================================
--- INVISIBLE
---========================================================
-
-local function SetInvisible(Value)
-
-    if not Character then return end
-
-    for _,Obj in ipairs(Character:GetDescendants()) do
-
-        if Obj:IsA("BasePart") then
-            Obj.LocalTransparencyModifier = Value and 1 or 0
-
-        elseif Obj:IsA("Decal") then
-            Obj.Transparency = Value and 1 or 0
-
-        end
-
-    end
-
-end
-
+local InvisibleButton=Button("👻 Invisible  [OFF]")
 InvisibleButton.MouseButton1Click:Connect(function()
+	State.Invisible=not State.Invisible
 
-    State.Invisible = not State.Invisible
+	for _,v in ipairs(Character:GetDescendants()) do
+		if v:IsA("BasePart") then
+			v.LocalTransparencyModifier=State.Invisible and 1 or 0
+		end
+	end
 
-    SetInvisible(State.Invisible)
-
-    if State.Invisible then
-        InvisibleButton.Text = "👻  INVISIBLE   ON"
-        InvisibleButton.TextColor3 = C.Accent
-    else
-        InvisibleButton.Text = "👻  INVISIBLE   OFF"
-        InvisibleButton.TextColor3 = C.Text
-    end
-
+	InvisibleButton.Text="👻 Invisible  ["..(State.Invisible and "ON" or "OFF").."]"
 end)
 
---========================================================
--- NOCLIP
---========================================================
-
-NoclipButton.MouseButton1Click:Connect(function()
-
-    State.Noclip = not State.Noclip
-
-    if State.Noclip then
-
-        NoclipButton.Text = "🚫  NOCLIP   ON"
-        NoclipButton.TextColor3 = C.Accent
-
-        if NoclipConnection then
-            NoclipConnection:Disconnect()
-        end
-
-        NoclipConnection = RunService.Stepped:Connect(function()
-
-            if Character then
-
-                for _,Part in ipairs(Character:GetDescendants()) do
-
-                    if Part:IsA("BasePart") then
-                        Part.CanCollide = false
-                    end
-
-                end
-
-            end
-
-        end)
-
-    else
-
-        NoclipButton.Text = "🚫  NOCLIP   OFF"
-        NoclipButton.TextColor3 = C.Text
-
-        if NoclipConnection then
-            NoclipConnection:Disconnect()
-            NoclipConnection = nil
-        end
-
-        if Character then
-
-            for _,Part in ipairs(Character:GetDescendants()) do
-
-                if Part:IsA("BasePart") then
-                    Part.CanCollide = true
-                end
-
-            end
-
-        end
-
-    end
-
-end)
-
---========================================================
--- FULLBRIGHT
---========================================================
-
+local FullbrightButton=Button("💡 Fullbright  [OFF]")
 FullbrightButton.MouseButton1Click:Connect(function()
+	State.Fullbright=not State.Fullbright
 
-    State.Fullbright = not State.Fullbright
+	if State.Fullbright then
+		Lighting.Brightness=3
+		Lighting.ClockTime=14
+		Lighting.FogEnd=100000
+		Lighting.Ambient=Color3.new(1,1,1)
+		Lighting.OutdoorAmbient=Color3.new(1,1,1)
+	else
+		Lighting.Brightness=OriginalLighting.Brightness
+		Lighting.ClockTime=OriginalLighting.ClockTime
+		Lighting.FogEnd=OriginalLighting.FogEnd
+		Lighting.Ambient=OriginalLighting.Ambient
+		Lighting.OutdoorAmbient=OriginalLighting.OutdoorAmbient
+	end
 
-    if State.Fullbright then
-
-        FullbrightButton.Text = "☀  FULLBRIGHT   ON"
-        FullbrightButton.TextColor3 = C.Accent
-
-        Lighting.Brightness = 3
-        Lighting.ClockTime = 14
-        Lighting.FogEnd = 100000
-        Lighting.GlobalShadows = false
-
-    else
-
-        FullbrightButton.Text = "☀  FULLBRIGHT   OFF"
-        FullbrightButton.TextColor3 = C.Text
-
-        Lighting.Brightness = OldLighting.Brightness
-        Lighting.ClockTime = OldLighting.ClockTime
-        Lighting.FogEnd = OldLighting.FogEnd
-        Lighting.GlobalShadows = OldLighting.GlobalShadows
-
-    end
-
+	FullbrightButton.Text="💡 Fullbright  ["..(State.Fullbright and "ON" or "OFF").."]"
 end)
 
---========================================================
--- NIGHT VISION
---========================================================
-
-local NightEffect
-
-NightVisionButton.MouseButton1Click:Connect(function()
-
-    State.NightVision = not State.NightVision
-
-    if State.NightVision then
-
-        NightVisionButton.Text = "🌙  NIGHT VISION   ON"
-        NightVisionButton.TextColor3 = C.Accent
-
-        NightEffect = Instance.new("ColorCorrectionEffect")
-        NightEffect.Name = "AZAMET_NightVision"
-        NightEffect.Brightness = .15
-        NightEffect.Contrast = .35
-        NightEffect.Saturation = -.15
-        NightEffect.Parent = Lighting
-
-    else
-
-        NightVisionButton.Text = "🌙  NIGHT VISION   OFF"
-        NightVisionButton.TextColor3 = C.Text
-
-        if NightEffect then
-            NightEffect:Destroy()
-            NightEffect = nil
-        end
-
-    end
-
-end)
-
---========================================================
--- NO FOG
---========================================================
-
-NoFogButton.MouseButton1Click:Connect(function()
-
-    State.NoFog = not State.NoFog
-
-    if State.NoFog then
-
-        NoFogButton.Text = "🌫  NO FOG   ON"
-        NoFogButton.TextColor3 = C.Accent
-        Lighting.FogEnd = 100000
-
-    else
-
-        NoFogButton.Text = "🌫  NO FOG   OFF"
-        NoFogButton.TextColor3 = C.Text
-        Lighting.FogEnd = OldLighting.FogEnd
-
-    end
-
-end)
-
---========================================================
--- NO SHADOWS
---========================================================
-
-NoShadowButton.MouseButton1Click:Connect(function()
-
-    State.NoShadows = not State.NoShadows
-
-    if State.NoShadows then
-
-        NoShadowButton.Text = "◐  NO SHADOWS   ON"
-        NoShadowButton.TextColor3 = C.Accent
-        Lighting.GlobalShadows = false
-
-    else
-
-        NoShadowButton.Text = "◐  NO SHADOWS   OFF"
-        NoShadowButton.TextColor3 = C.Text
-        Lighting.GlobalShadows = OldLighting.GlobalShadows
-
-    end
-
-end)
-
---========================================================
--- THIRD PERSON
---========================================================
-
-ThirdPersonButton.MouseButton1Click:Connect(function()
-
-    State.ThirdPerson = not State.ThirdPerson
-
-    if State.ThirdPerson then
-
-        ThirdPersonButton.Text = "🎥  THIRD PERSON   ON"
-        ThirdPersonButton.TextColor3 = C.Accent
-
-        Player.CameraMode = Enum.CameraMode.Classic
-        Player.CameraMinZoomDistance = 8
-        Player.CameraMaxZoomDistance = 18
-
-    else
-
-        ThirdPersonButton.Text = "🎥  THIRD PERSON   OFF"
-        ThirdPersonButton.TextColor3 = C.Text
-
-        Player.CameraMinZoomDistance = .5
-        Player.CameraMaxZoomDistance = 400
-
-    end
-
-end)
-
---========================================================
--- FOV
---========================================================
-
+local FOVBox=InputRow("Camera FOV",tostring(OldFOV))
+local FOVApply=Button("🎥 FOV Uygula")
 FOVApply.MouseButton1Click:Connect(function()
-
-    local Value = tonumber(FOVBox.Text)
-
-    if Value then
-
-        Value = math.clamp(Value,40,120)
-
-        Camera.FieldOfView = Value
-
-    end
-
+	local n=tonumber(FOVBox.Text)
+	if n then
+		Camera.FieldOfView=math.clamp(n,40,120)
+	end
 end)
 
---========================================================
--- TOOLS PAGE
---========================================================
-
-local TeleportButton = Button("📍  TELEPORT TOOL",0,0,205,42,ToolsPage)
-local ResetButton = Button("↻  RESET CHARACTER",215,0,205,42,ToolsPage)
-
-local GravityBox = Instance.new("TextBox")
-GravityBox.Position = UDim2.fromOffset(0,52)
-GravityBox.Size = UDim2.fromOffset(150,42)
-GravityBox.BackgroundColor3 = C.Button
-GravityBox.BorderSizePixel = 0
-GravityBox.PlaceholderText = "Gravity"
-GravityBox.PlaceholderColor3 = C.Muted
-GravityBox.TextColor3 = C.Text
-GravityBox.TextSize = 12
-GravityBox.Font = Enum.Font.Gotham
-GravityBox.Parent = ToolsPage
-
-Instance.new("UICorner",GravityBox).CornerRadius = UDim.new(0,10)
-
-local GravityButton = Button("UYGULA",160,52,125,42,ToolsPage)
-
-local NormalGravity = Button("NORMAL GRAVITY",295,52,125,42,ToolsPage)
-
---========================================================
--- TELEPORT TOOL
---========================================================
-
-local function GiveTeleportTool()
-
-    if Player.Backpack:FindFirstChild("AZAMET") then
-        return
-    end
-
-    if Character and Character:FindFirstChild("AZAMET") then
-        return
-    end
-
-    local Tool = Instance.new("Tool")
-
-    Tool.Name = "AZAMET"
-    Tool.ToolTip = "Tıkla → teleport"
-    Tool.RequiresHandle = false
-    Tool.CanBeDropped = false
-
-    Tool.Activated:Connect(function()
-
-        local Mouse = Player:GetMouse()
-
-        if Mouse and Mouse.Hit and Root then
-
-            Root.CFrame =
-                CFrame.new(Mouse.Hit.Position + Vector3.new(0,3,0))
-
-        end
-
-    end)
-
-    Tool.Parent = Player.Backpack
-
-end
-
-local function RemoveTeleportTool()
-
-    local BackpackTool = Player.Backpack:FindFirstChild("AZAMET")
-
-    if BackpackTool then
-        BackpackTool:Destroy()
-    end
-
-    if Character then
-
-        local EquippedTool = Character:FindFirstChild("AZAMET")
-
-        if EquippedTool then
-            EquippedTool:Destroy()
-        end
-
-    end
-
-end
-
-TeleportButton.MouseButton1Click:Connect(function()
-
-    State.Teleport = not State.Teleport
-
-    if State.Teleport then
-
-        TeleportButton.Text = "📍  TOOL ACTIVE"
-        TeleportButton.TextColor3 = C.Accent
-
-        GiveTeleportTool()
-
-    else
-
-        TeleportButton.Text = "📍  TELEPORT TOOL"
-        TeleportButton.TextColor3 = C.Text
-
-        RemoveTeleportTool()
-
-    end
-
+local ZoomBox=InputRow("Camera Zoom Max", "128")
+local ZoomApply=Button("🔭 Camera Zoom Uygula")
+ZoomApply.MouseButton1Click:Connect(function()
+	local n=tonumber(ZoomBox.Text)
+	if n then
+		Player.CameraMaxZoomDistance=math.clamp(n,5,500)
+	end
 end)
 
---========================================================
--- GRAVITY
---========================================================
+Section("WORLD / EFFECTS")
 
-GravityButton.MouseButton1Click:Connect(function()
-
-    local Value = tonumber(GravityBox.Text)
-
-    if Value then
-        workspace.Gravity = Value
-    end
-
+local GravityBox=InputRow("Gravity",tostring(OldGravity))
+local GravityApply=Button("🪐 Gravity Uygula")
+GravityApply.MouseButton1Click:Connect(function()
+	local n=tonumber(GravityBox.Text)
+	if n then workspace.Gravity=math.clamp(n,0,500) end
 end)
 
-NormalGravity.MouseButton1Click:Connect(function()
-    workspace.Gravity = OldGravity
-    GravityBox.Text = tostring(OldGravity)
+local TimeBox=InputRow("ClockTime 0-24",tostring(Lighting.ClockTime))
+local TimeApply=Button("🌅 Time Changer")
+TimeApply.MouseButton1Click:Connect(function()
+	local n=tonumber(TimeBox.Text)
+	if n then Lighting.ClockTime=math.clamp(n,0,24) end
 end)
 
---========================================================
--- RESET
---========================================================
+local AtmosButton=Button("🌫 Atmosphere  [OFF]")
+AtmosButton.MouseButton1Click:Connect(function()
+	State.Atmosphere=not State.Atmosphere
 
-ResetButton.MouseButton1Click:Connect(function()
+	local atm=Lighting:FindFirstChildOfClass("Atmosphere")
 
-    UpdateCharacter()
+	if State.Atmosphere then
+		if not atm then
+			atm=Instance.new("Atmosphere")
+			atm.Parent=Lighting
+		end
+		atm.Density=.35
+		atm.Haze=1
+	else
+		if atm then atm.Density=0 end
+	end
 
-    if Humanoid then
-        Humanoid.Health = 0
-    end
-
+	AtmosButton.Text="🌫 Atmosphere  ["..(State.Atmosphere and "ON" or "OFF").."]"
 end)
 
---========================================================
--- WORLD PAGE
---========================================================
+local ShakeButton=Button("🎬 Camera Shake  [OFF]")
+local ShakeTime=0
 
-local AntiAFKButton = Button("💤  ANTI-AFK   OFF",0,0,205,42,WorldPage)
+ShakeButton.MouseButton1Click:Connect(function()
+	State.CameraShake=not State.CameraShake
+	ShakeButton.Text="🎬 Camera Shake  ["..(State.CameraShake and "ON" or "OFF").."]"
+end)
 
-local DayButton = Button("☀  DAY",215,0,95,42,WorldPage)
-local NightButton = Button("🌙  NIGHT",320,0,100,42,WorldPage)
+local CrossButton=Button("🎯 Crosshair  [OFF]")
 
-local WorldFOVBox = Instance.new("TextLabel")
-WorldFOVBox.Position = UDim2.fromOffset(0,52)
-WorldFOVBox.Size = UDim2.fromOffset(420,42)
-WorldFOVBox.BackgroundColor3 = C.Button
-WorldFOVBox.BorderSizePixel = 0
-WorldFOVBox.Text = "AZAMET WORLD CONTROL"
-WorldFOVBox.TextColor3 = C.Accent
-WorldFOVBox.TextSize = 13
-WorldFOVBox.Font = Enum.Font.GothamBold
-WorldFOVBox.Parent = WorldPage
+local Crosshair
 
-Instance.new("UICorner",WorldFOVBox).CornerRadius = UDim.new(0,10)
+CrossButton.MouseButton1Click:Connect(function()
+	State.Crosshair=not State.Crosshair
 
---========================================================
--- ANTI AFK
---========================================================
+	if State.Crosshair then
+		Crosshair=Instance.new("TextLabel")
+		Crosshair.Size=UDim2.fromOffset(30,30)
+		Crosshair.Position=UDim2.fromScale(.5,.5)
+		Crosshair.AnchorPoint=Vector2.new(.5,.5)
+		Crosshair.BackgroundTransparency=1
+		Crosshair.Text="+"
+		Crosshair.Font=Enum.Font.GothamBold
+		Crosshair.TextSize=25
+		Crosshair.TextColor3=Color3.fromRGB(0,255,210)
+		Crosshair.Parent=Gui
+	else
+		if Crosshair then Crosshair:Destroy() Crosshair=nil end
+	end
+
+	CrossButton.Text="🎯 Crosshair  ["..(State.Crosshair and "ON" or "OFF").."]"
+end)
+
+local CompassButton=Button("🧭 Compass  [OFF]")
+local Compass
+
+CompassButton.MouseButton1Click:Connect(function()
+	State.Compass=not State.Compass
+
+	if State.Compass then
+		Compass=Instance.new("TextLabel")
+		Compass.Size=UDim2.fromOffset(160,30)
+		Compass.Position=UDim2.fromScale(.5,0)
+		Compass.AnchorPoint=Vector2.new(.5,0)
+		Compass.BackgroundColor3=Color3.fromRGB(5,10,15)
+		Compass.BackgroundTransparency=.2
+		Compass.Text="N     E     S     W"
+		Compass.Font=Enum.Font.GothamBold
+		Compass.TextSize=13
+		Compass.TextColor3=Color3.fromRGB(0,255,210)
+		Compass.Parent=Gui
+		Instance.new("UICorner",Compass).CornerRadius=UDim.new(0,8)
+	else
+		if Compass then Compass:Destroy() Compass=nil end
+	end
+
+	CompassButton.Text="🧭 Compass  ["..(State.Compass and "ON" or "OFF").."]"
+end)
+
+Section("MONITOR")
+
+local CoordLabel=Instance.new("TextLabel")
+CoordLabel.Size=UDim2.fromOffset(240,55)
+CoordLabel.Position=UDim2.fromOffset(12,70)
+CoordLabel.BackgroundColor3=Color3.fromRGB(5,10,15)
+CoordLabel.BackgroundTransparency=.2
+CoordLabel.Text=""
+CoordLabel.TextColor3=Color3.fromRGB(0,255,210)
+CoordLabel.Font=Enum.Font.Code
+CoordLabel.TextSize=12
+CoordLabel.TextXAlignment=Enum.TextXAlignment.Left
+CoordLabel.Visible=false
+CoordLabel.Parent=Gui
+Instance.new("UICorner",CoordLabel).CornerRadius=UDim.new(0,8)
+
+local CoordButton=Button("📍 Coordinates HUD  [OFF]")
+CoordButton.MouseButton1Click:Connect(function()
+	State.Coordinates=not State.Coordinates
+	CoordLabel.Visible=State.Coordinates
+	CoordButton.Text="📍 Coordinates HUD  ["..(State.Coordinates and "ON" or "OFF").."]"
+end)
+
+local FPSLabel=Instance.new("TextLabel")
+FPSLabel.Size=UDim2.fromOffset(130,30)
+FPSLabel.Position=UDim2.new(1,-140,0,70)
+FPSLabel.BackgroundTransparency=.2
+FPSLabel.BackgroundColor3=Color3.fromRGB(5,10,15)
+FPSLabel.TextColor3=Color3.fromRGB(0,255,210)
+FPSLabel.Font=Enum.Font.Code
+FPSLabel.TextSize=12
+FPSLabel.Visible=false
+FPSLabel.Parent=Gui
+Instance.new("UICorner",FPSLabel).CornerRadius=UDim.new(0,8)
+
+local FPSButton=Button("📊 FPS Counter  [OFF]")
+FPSButton.MouseButton1Click:Connect(function()
+	State.FPS=not State.FPS
+	FPSLabel.Visible=State.FPS
+	FPSButton.Text="📊 FPS Counter  ["..(State.FPS and "ON" or "OFF").."]"
+end)
+
+local PingButton=Button("📡 Ping Counter  [OFF]")
+local PingLabel=Instance.new("TextLabel")
+PingLabel.Size=UDim2.fromOffset(130,30)
+PingLabel.Position=UDim2.new(1,-140,0,105)
+PingLabel.BackgroundColor3=Color3.fromRGB(5,10,15)
+PingLabel.BackgroundTransparency=.2
+PingLabel.TextColor3=Color3.fromRGB(0,255,210)
+PingLabel.Font=Enum.Font.Code
+PingLabel.TextSize=12
+PingLabel.Visible=false
+PingLabel.Parent=Gui
+Instance.new("UICorner",PingLabel).CornerRadius=UDim.new(0,8)
+
+PingButton.MouseButton1Click:Connect(function()
+	State.Ping=not State.Ping
+	PingLabel.Visible=State.Ping
+	PingButton.Text="📡 Ping Counter  ["..(State.Ping and "ON" or "OFF").."]"
+end)
+
+Section("ADMIN")
+
+local WalkFlingButton=Button("💥 Walk Fling  [OFF]")
+
+WalkFlingButton.MouseButton1Click:Connect(function()
+	State.WalkFling=not State.WalkFling
+	WalkFlingButton.Text="💥 Walk Fling  ["..(State.WalkFling and "ON" or "OFF").."]"
+
+	local Remote=ReplicatedStorage:FindFirstChild("AZAMET_WalkFling")
+
+	if Remote then
+		Remote:FireServer(State.WalkFling)
+	end
+end)
+
+local AntiAFKButton=Button("⏱ Anti-AFK  [OFF]")
 
 AntiAFKButton.MouseButton1Click:Connect(function()
-
-    State.AntiAFK = not State.AntiAFK
-
-    if State.AntiAFK then
-
-        AntiAFKButton.Text = "💤  ANTI-AFK   ON"
-        AntiAFKButton.TextColor3 = C.Accent
-
-        if AntiAFKConnection then
-            AntiAFKConnection:Disconnect()
-        end
-
-        AntiAFKConnection = UserInputService.InputBegan:Connect(function()
-            -- UI input keeps the local session active.
-        end)
-
-    else
-
-        AntiAFKButton.Text = "💤  ANTI-AFK   OFF"
-        AntiAFKButton.TextColor3 = C.Text
-
-        if AntiAFKConnection then
-            AntiAFKConnection:Disconnect()
-            AntiAFKConnection = nil
-        end
-
-    end
-
+	State.AntiAFK=not State.AntiAFK
+	AntiAFKButton.Text="⏱ Anti-AFK  ["..(State.AntiAFK and "ON" or "OFF").."]"
 end)
 
---========================================================
--- DAY / NIGHT
---========================================================
-
-DayButton.MouseButton1Click:Connect(function()
-
-    Lighting.ClockTime = 14
-
+local ResetButton=Button("🔄 Reset Character")
+ResetButton.MouseButton1Click:Connect(function()
+	if Humanoid then
+		Humanoid.Health=0
+	end
 end)
 
-NightButton.MouseButton1Click:Connect(function()
+--==================================================
+-- RENDER LOOP
+--==================================================
 
-    Lighting.ClockTime = 0
+local LastTime=tick()
+local Frames=0
+local FPS=0
 
+RunService.RenderStepped:Connect(function(dt)
+	if Destroyed then return end
+
+	Frames+=1
+
+	if tick()-LastTime>=1 then
+		FPS=Frames
+		Frames=0
+		LastTime=tick()
+	end
+
+	if State.Noclip and Character then
+		for _,v in ipairs(Character:GetDescendants()) do
+			if v:IsA("BasePart") then
+				v.CanCollide=false
+			end
+		end
+	end
+
+	if State.Platform and Platform and Root then
+		Platform.CFrame=CFrame.new(
+			Root.Position.X,
+			Root.Position.Y-3.2,
+			Root.Position.Z
+		)
+	end
+
+	if State.Coordinates and Root then
+		local p=Root.Position
+		CoordLabel.Text=string.format(
+			"  X: %.1f\n  Y: %.1f\n  Z: %.1f",
+			p.X,p.Y,p.Z
+		)
+	end
+
+	if State.FPS then
+		FPSLabel.Text="FPS: "..FPS
+	end
+
+	if State.Ping then
+		local ping=math.floor(Player:GetNetworkPing()*1000)
+		PingLabel.Text="Ping: "..ping.." ms"
+	end
+
+	if State.CameraShake then
+		ShakeTime+=dt*12
+
+		local x=math.sin(ShakeTime)*CameraShakePower/100
+		local y=math.cos(ShakeTime*1.3)*CameraShakePower/100
+
+		Camera.CFrame=Camera.CFrame*CFrame.Angles(x,y,0)
+	end
 end)
 
---========================================================
--- PAGE OPEN
---========================================================
-
-ShowPage("Movement")
-
---========================================================
--- CONFIRMATION MODAL
---========================================================
-
-local Overlay = Instance.new("Frame")
-Overlay.Size = UDim2.fromScale(1,1)
-Overlay.BackgroundColor3 = Color3.new(0,0,0)
-Overlay.BackgroundTransparency = 1
-Overlay.BorderSizePixel = 0
-Overlay.Visible = false
-Overlay.ZIndex = 100
-Overlay.Parent = Gui
-
-local Confirm = Instance.new("Frame")
-Confirm.AnchorPoint = Vector2.new(.5,.5)
-Confirm.Position = UDim2.fromScale(.5,.5)
-Confirm.Size = UDim2.fromOffset(380,205)
-Confirm.BackgroundColor3 = Color3.fromRGB(8,11,17)
-Confirm.BorderSizePixel = 0
-Confirm.Visible = false
-Confirm.ZIndex = 101
-Confirm.Parent = Gui
-
-Instance.new("UICorner",Confirm).CornerRadius = UDim.new(0,18)
-
-local ConfirmScale = Instance.new("UIScale")
-ConfirmScale.Scale = .75
-ConfirmScale.Parent = Confirm
-
-local ConfirmStroke = Instance.new("UIStroke")
-ConfirmStroke.Color = C.Danger
-ConfirmStroke.Transparency = .25
-ConfirmStroke.Thickness = 1.5
-ConfirmStroke.Parent = Confirm
-
-local ConfirmTitle = Instance.new("TextLabel")
-ConfirmTitle.Position = UDim2.fromOffset(22,18)
-ConfirmTitle.Size = UDim2.new(1,-44,0,30)
-ConfirmTitle.BackgroundTransparency = 1
-ConfirmTitle.Text = "UI'Yİ KAPAT?"
-ConfirmTitle.TextColor3 = Color3.fromRGB(255,100,110)
-ConfirmTitle.TextSize = 21
-ConfirmTitle.Font = Enum.Font.GothamBold
-ConfirmTitle.TextXAlignment = Enum.TextXAlignment.Left
-ConfirmTitle.ZIndex = 102
-ConfirmTitle.Parent = Confirm
-
-local ConfirmText = Instance.new("TextLabel")
-ConfirmText.Position = UDim2.fromOffset(22,53)
-ConfirmText.Size = UDim2.new(1,-44,0,45)
-ConfirmText.BackgroundTransparency = 1
-ConfirmText.Text = "Emin misin?\nAktif özellikler kapatılacak."
-ConfirmText.TextColor3 = Color3.fromRGB(170,180,190)
-ConfirmText.TextSize = 13
-ConfirmText.Font = Enum.Font.Gotham
-ConfirmText.TextXAlignment = Enum.TextXAlignment.Left
-ConfirmText.ZIndex = 102
-ConfirmText.Parent = Confirm
-
-local NoButton = Instance.new("TextButton")
-NoButton.Position = UDim2.fromOffset(22,130)
-NoButton.Size = UDim2.fromOffset(158,45)
-NoButton.BackgroundColor3 = C.Button
-NoButton.BorderSizePixel = 0
-NoButton.Text = "HAYIR"
-NoButton.TextColor3 = C.Text
-NoButton.TextSize = 13
-NoButton.Font = Enum.Font.GothamBold
-NoButton.AutoButtonColor = false
-NoButton.ZIndex = 103
-NoButton.Parent = Confirm
-
-Instance.new("UICorner",NoButton).CornerRadius = UDim.new(0,10)
-
-local YesButton = Instance.new("TextButton")
-YesButton.Position = UDim2.fromOffset(200,130)
-YesButton.Size = UDim2.fromOffset(158,45)
-YesButton.BackgroundColor3 = Color3.fromRGB(175,45,55)
-YesButton.BorderSizePixel = 0
-YesButton.Text = "EVET"
-YesButton.TextColor3 = Color3.new(1,1,1)
-YesButton.TextSize = 13
-YesButton.Font = Enum.Font.GothamBold
-YesButton.AutoButtonColor = false
-YesButton.ZIndex = 103
-YesButton.Parent = Confirm
-
-Instance.new("UICorner",YesButton).CornerRadius = UDim.new(0,10)
-
---========================================================
--- SHOW / HIDE CONFIRM
---========================================================
-
-local function OpenConfirm()
-
-    if Destroyed then return end
-
-    ConfirmOpen = true
-
-    Overlay.Visible = true
-    Confirm.Visible = true
-
-    Overlay.BackgroundTransparency = 1
-    ConfirmScale.Scale = .75
-
-    TweenService:Create(
-        Overlay,
-        TweenInfo.new(.22),
-        {BackgroundTransparency = .38}
-    ):Play()
-
-    TweenService:Create(
-        ConfirmScale,
-        TweenInfo.new(.4,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
-        {Scale = 1}
-    ):Play()
-
-    PlaySound(OpenSound)
-
-end
-
-local function CloseConfirm()
-
-    ConfirmOpen = false
-
-    TweenService:Create(
-        Overlay,
-        TweenInfo.new(.18),
-        {BackgroundTransparency = 1}
-    ):Play()
-
-    TweenService:Create(
-        ConfirmScale,
-        TweenInfo.new(.18,Enum.EasingStyle.Quart,Enum.EasingDirection.In),
-        {Scale = .75}
-    ):Play()
-
-    task.wait(.18)
-
-    if not ConfirmOpen then
-        Confirm.Visible = false
-        Overlay.Visible = false
-    end
-
-end
-
-NoButton.MouseButton1Click:Connect(CloseConfirm)
-
---========================================================
--- DISABLE EVERYTHING
---========================================================
-
-local function DisableEverything()
-
-    Destroyed = true
-
-    State.Fly = false
-    State.Freeze = false
-    State.ESP = false
-    State.Invisible = false
-    State.Noclip = false
-    State.Fullbright = false
-    State.InfiniteJump = false
-    State.Teleport = false
-    State.AntiAFK = false
-    State.NoFog = false
-    State.NoShadows = false
-    State.NightVision = false
-    State.ThirdPerson = false
-    State.AutoSprint = false
-
-    if FlyConnection then
-        FlyConnection:Disconnect()
-        FlyConnection = nil
-    end
-
-    if NoclipConnection then
-        NoclipConnection:Disconnect()
-        NoclipConnection = nil
-    end
-
-    if InfiniteJumpConnection then
-        InfiniteJumpConnection:Disconnect()
-        InfiniteJumpConnection = nil
-    end
-
-    if AntiAFKConnection then
-        AntiAFKConnection:Disconnect()
-        AntiAFKConnection = nil
-    end
-
-    if AutoSprintConnection then
-        AutoSprintConnection:Disconnect()
-        AutoSprintConnection = nil
-    end
-
-    if NightEffect then
-        NightEffect:Destroy()
-        NightEffect = nil
-    end
-
-    UpdateCharacter()
-
-    if Humanoid then
-
-        Humanoid.PlatformStand = false
-        Humanoid.WalkSpeed = 16
-        Humanoid.UseJumpPower = true
-        Humanoid.JumpPower = 50
-
-    end
-
-    if Root then
-
-        Root.Anchored = false
-        Root.AssemblyLinearVelocity = Vector3.zero
-        Root.AssemblyAngularVelocity = Vector3.zero
-
-    end
-
-    workspace.Gravity = OldGravity
-    Camera.FieldOfView = OldFOV
-
-    Lighting.Brightness = OldLighting.Brightness
-    Lighting.ClockTime = OldLighting.ClockTime
-    Lighting.FogEnd = OldLighting.FogEnd
-    Lighting.GlobalShadows = OldLighting.GlobalShadows
-
-    Player.CameraMinZoomDistance = .5
-    Player.CameraMaxZoomDistance = 400
-
-    if Character then
-
-        for _,Obj in ipairs(Character:GetDescendants()) do
-
-            if Obj:IsA("BasePart") then
-                Obj.LocalTransparencyModifier = 0
-                Obj.CanCollide = true
-            elseif Obj:IsA("Decal") then
-                Obj.Transparency = 0
-            end
-
-        end
-
-    end
-
-    for P,Object in pairs(ESPObjects) do
-
-        if Object then
-            Object:Destroy()
-        end
-
-        ESPObjects[P] = nil
-
-    end
-
-    RemoveTeleportTool()
-
-    PlaySound(CloseSound)
-
-    local Fade = Instance.new("Frame")
-    Fade.Size = UDim2.fromScale(1,1)
-    Fade.BackgroundColor3 = Color3.fromRGB(3,5,9)
-    Fade.BackgroundTransparency = 1
-    Fade.BorderSizePixel = 0
-    Fade.ZIndex = 999
-    Fade.Parent = Gui
-
-    TweenService:Create(
-        Fade,
-        TweenInfo.new(.35,Enum.EasingStyle.Quart),
-        {BackgroundTransparency = 0}
-    ):Play()
-
-    task.wait(.4)
-
-    Gui:Destroy()
-
-end
-
-YesButton.MouseButton1Click:Connect(DisableEverything)
-
---========================================================
--- CLOSE
---========================================================
-
-CloseButton.MouseButton1Click:Connect(function()
-
-    if not ConfirmOpen then
-        OpenConfirm()
-    end
-
+--==================================================
+-- INFINITE JUMP
+--==================================================
+
+UIS.JumpRequest:Connect(function()
+	if State.InfiniteJump and Humanoid then
+		Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+	end
 end)
 
---========================================================
+--==================================================
+-- ANTI AFK
+--==================================================
+
+Player.Idled:Connect(function()
+	if State.AntiAFK then
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton2(Vector2.new())
+	end
+end)
+
+--==================================================
+-- DRAG
+--==================================================
+
+local Dragging=false
+local DragStart
+local StartPos
+
+Header.InputBegan:Connect(function(input)
+	if input.UserInputType==Enum.UserInputType.MouseButton1
+		or input.UserInputType==Enum.UserInputType.Touch then
+
+		Dragging=true
+		DragStart=input.Position
+		StartPos=Main.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState==Enum.UserInputState.End then
+				Dragging=false
+			end
+		end)
+	end
+end)
+
+UIS.InputChanged:Connect(function(input)
+	if Dragging and (
+		input.UserInputType==Enum.UserInputType.MouseMovement
+		or input.UserInputType==Enum.UserInputType.Touch
+	) then
+
+		local Delta=input.Position-DragStart
+
+		Main.Position=UDim2.new(
+			StartPos.X.Scale,
+			StartPos.X.Offset+Delta.X,
+			StartPos.Y.Scale,
+			StartPos.Y.Offset+Delta.Y
+		)
+	end
+end)
+
+--==================================================
 -- MINIMIZE
---========================================================
+--==================================================
 
-MinButton.MouseButton1Click:Connect(function()
+local Mini=Instance.new("TextButton")
+Mini.Size=UDim2.fromOffset(170,34)
+Mini.Position=UDim2.fromOffset(12,12)
+Mini.BackgroundColor3=Color3.fromRGB(7,12,18)
+Mini.Text="──── AZAMET • By Zeth ────"
+Mini.Font=Enum.Font.GothamBold
+Mini.TextSize=11
+Mini.TextColor3=Color3.fromRGB(0,255,210)
+Mini.Visible=false
+Mini.Parent=Gui
+Instance.new("UICorner",Mini).CornerRadius=UDim.new(0,8)
 
-    if ConfirmOpen then
-        CloseConfirm()
-    end
-
-    UIClosed = true
-
-    TweenService:Create(
-        MainScale,
-        TweenInfo.new(.28,Enum.EasingStyle.Quart,Enum.EasingDirection.In),
-        {Scale = .75}
-    ):Play()
-
-    TweenService:Create(
-        Main,
-        TweenInfo.new(.28,Enum.EasingStyle.Quart,Enum.EasingDirection.In),
-        {BackgroundTransparency = 1}
-    ):Play()
-
-    task.wait(.28)
-
-    Main.Visible = false
-    Main.BackgroundTransparency = 0
-
-    Mini.Visible = true
-    Mini.Size = UDim2.fromOffset(0,36)
-
-    TweenService:Create(
-        Mini,
-        TweenInfo.new(.4,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
-        {Size = UDim2.fromOffset(230,36)}
-    ):Play()
-
+Minimize.MouseButton1Click:Connect(function()
+	PlaySound("Click")
+	Main.Visible=false
+	Mini.Visible=true
 end)
-
---========================================================
--- RESTORE
---========================================================
 
 Mini.MouseButton1Click:Connect(function()
-
-    UIClosed = false
-
-    Mini.Visible = false
-
-    Main.Visible = true
-    MainScale.Scale = .75
-
-    TweenService:Create(
-        MainScale,
-        TweenInfo.new(.45,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
-        {Scale = 1}
-    ):Play()
-
-    PlaySound(OpenSound)
-
+	PlaySound("Click")
+	Mini.Visible=false
+	Main.Visible=true
 end)
 
---========================================================
+--==================================================
+-- CLOSE CONFIRM
+--==================================================
+
+local Overlay=Instance.new("Frame")
+Overlay.Size=UDim2.fromScale(1,1)
+Overlay.BackgroundColor3=Color3.new(0,0,0)
+Overlay.BackgroundTransparency=.4
+Overlay.Visible=false
+Overlay.ZIndex=100
+Overlay.Parent=Gui
+
+local Confirm=Instance.new("Frame")
+Confirm.Size=UDim2.fromOffset(310,165)
+Confirm.Position=UDim2.fromScale(.5,.5)
+Confirm.AnchorPoint=Vector2.new(.5,.5)
+Confirm.BackgroundColor3=Color3.fromRGB(8,12,18)
+Confirm.ZIndex=101
+Confirm.Parent=Gui
+
+Instance.new("UICorner",Confirm).CornerRadius=UDim.new(0,12)
+
+local CS=Instance.new("UIStroke",Confirm)
+CS.Color=Color3.fromRGB(0,255,210)
+CS.Thickness=1.3
+
+local CT=Instance.new("TextLabel")
+CT.Size=UDim2.new(1,0,0,40)
+CT.BackgroundTransparency=1
+CT.Text="UI'Yİ KAPAT?"
+CT.Font=Enum.Font.GothamBlack
+CT.TextSize=19
+CT.TextColor3=Color3.fromRGB(0,255,210)
+CT.ZIndex=102
+CT.Parent=Confirm
+
+local CX=Instance.new("TextLabel")
+CX.Size=UDim2.new(1,-20,0,45)
+CX.Position=UDim2.fromOffset(10,40)
+CX.BackgroundTransparency=1
+CX.Text="Emin misin?\nAktif özellikler kapatılacak."
+CX.Font=Enum.Font.Gotham
+CX.TextSize=12
+CX.TextColor3=Color3.fromRGB(180,190,200)
+CX.ZIndex=102
+CX.Parent=Confirm
+
+local No=Instance.new("TextButton")
+No.Size=UDim2.fromOffset(125,38)
+No.Position=UDim2.fromOffset(20,110)
+No.BackgroundColor3=Color3.fromRGB(30,38,48)
+No.Text="HAYIR"
+No.Font=Enum.Font.GothamBold
+No.TextSize=13
+No.TextColor3=Color3.new(1,1,1)
+No.ZIndex=102
+No.Parent=Confirm
+Instance.new("UICorner",No).CornerRadius=UDim.new(0,8)
+
+local Yes=Instance.new("TextButton")
+Yes.Size=UDim2.fromOffset(125,38)
+Yes.Position=UDim2.fromOffset(165,110)
+Yes.BackgroundColor3=Color3.fromRGB(125,35,45)
+Yes.Text="EVET"
+Yes.Font=Enum.Font.GothamBold
+Yes.TextSize=13
+Yes.TextColor3=Color3.new(1,1,1)
+Yes.ZIndex=102
+Yes.Parent=Confirm
+Instance.new("UICorner",Yes).CornerRadius=UDim.new(0,8)
+
+Confirm.Visible=false
+
+Close.MouseButton1Click:Connect(function()
+	PlaySound("Click")
+	Overlay.Visible=true
+	Confirm.Visible=true
+end)
+
+No.MouseButton1Click:Connect(function()
+	PlaySound("Click")
+	Confirm.Visible=false
+	Overlay.Visible=false
+end)
+
+Yes.MouseButton1Click:Connect(function()
+	PlaySound("Click")
+
+	Destroyed=true
+
+	State.Fly=false
+	State.Noclip=false
+	State.WalkFling=false
+
+	if FlyVelocity then FlyVelocity:Destroy() end
+	if FlyConnection then FlyConnection:Disconnect() end
+	if Platform then Platform:Destroy() end
+
+	Camera.FieldOfView=OldFOV
+	workspace.Gravity=OldGravity
+
+	if Crosshair then Crosshair:Destroy() end
+	if Compass then Compass:Destroy() end
+
+	Overlay:Destroy()
+	Confirm:Destroy()
+	Gui:Destroy()
+end)
+
+--==================================================
 -- LOGIN
---========================================================
+--==================================================
 
-Enter.MouseButton1Click:Connect(function()
+Login.MouseButton1Click:Connect(function()
+	if KeyBox.Text==KEY then
+		PlaySound("Success")
 
-    if KeyBox.Text == KEY then
+		KeyStatus.Text="KEY DOĞRU • By Zeth"
+		KeyStatus.TextColor3=Color3.fromRGB(0,255,210)
 
-        PlaySound(OpenSound)
+		task.wait(.35)
 
-        KeyStatus.Text = "✓ Erişim onaylandı"
-        KeyStatus.TextColor3 = Color3.fromRGB(0,255,150)
+		KeyFrame.Visible=false
+		Main.Visible=true
 
-        task.wait(.35)
+		Main.Size=UDim2.fromOffset(490,330)
 
-        KeyFrame.Visible = false
-        Main.Visible = true
+		TweenService:Create(
+			Main,
+			TweenInfo.new(.45,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
+			{Size=UDim2.fromOffset(520,360)}
+		):Play()
+	else
+		PlaySound("Error")
 
-        MainScale.Scale = .72
+		KeyStatus.Text="Hatalı key!"
+		KeyStatus.TextColor3=Color3.fromRGB(255,70,80)
 
-        TweenService:Create(
-            MainScale,
-            TweenInfo.new(.6,Enum.EasingStyle.Back,Enum.EasingDirection.Out),
-            {Scale = 1}
-        ):Play()
+		local Original=KeyFrame.Position
 
-    else
+		for i=1,4 do
+			KeyFrame.Position=Original+UDim2.fromOffset(8,0)
+			task.wait(.04)
+			KeyFrame.Position=Original-UDim2.fromOffset(8,0)
+			task.wait(.04)
+		end
 
-        KeyStatus.Text = "✕ Hatalı key"
-        KeyStatus.TextColor3 = C.Danger
-
-        KeyBox.Text = ""
-
-        PlaySound(CloseSound)
-
-        local Original = KeyFrame.Position
-
-        TweenService:Create(
-            KeyFrame,
-            TweenInfo.new(
-                .055,
-                Enum.EasingStyle.Linear,
-                Enum.EasingDirection.InOut,
-                4,
-                true
-            ),
-            {
-                Position = Original + UDim2.fromOffset(8,0)
-            }
-        ):Play()
-
-    end
-
+		KeyFrame.Position=Original
+	end
 end)
 
---========================================================
--- CHARACTER UPDATE
---========================================================
+--==================================================
+-- START
+--==================================================
 
-Player.CharacterAdded:Connect(function()
+KeyFrame.Visible=true
+Main.Visible=false
 
-    task.wait(.5)
-
-    if Destroyed then
-        return
-    end
-
-    UpdateCharacter()
-
-    if State.Invisible then
-        SetInvisible(true)
-    end
-
-    if State.ESP then
-        RefreshESP()
-    end
-
-    if State.Teleport then
-        GiveTeleportTool()
-    end
-
-end)
-
---========================================================
--- FINAL
---========================================================
-
-print("AZAMET HUB LOADED")
+print("AZAMET HUB • Zeth babapıro😎")
